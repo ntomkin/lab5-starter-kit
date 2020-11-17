@@ -1,9 +1,12 @@
 const express = require('express');
-const bodyParser = require('body-parser');
+const session = require('express-session');
+const mustacheExpress = require('mustache-express');
 const app = express();
+const socket = require('socket.io');
 
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
+const http = require('http');
+const server = http.Server(app);
+const io = socket(server);
 
 const Database = require('./lib/database.js');
 const Customers = require('./lib/customers.js');
@@ -11,12 +14,15 @@ const Subscriptions = require('./lib/subscriptions.js');
 
 //  Init database for later
 let database = new Database('./api.db');
+(async () => {
+  database.wipe().then(async () => {
+    let admin_user = await database.register_user("Administrator", "19055555555", "administrator", "admin", "admin@app.com", "1980-03-13");
+    console.log('Admin user created', admin_user);
+  });
+}).call();
 
-let customers = new Customers();
-let subscriptions = new Subscriptions();
-
-// include the mustache template engine for express
-const mustacheExpress = require('mustache-express');
+// let customers = new Customers();
+// let subscriptions = new Subscriptions();
 
 // registers the mustache engine with Express
 app.engine("mustache", mustacheExpress());
@@ -28,33 +34,116 @@ app.set('view engine', 'mustache');
 // files should have the extension filename.mustache
 app.set('views', __dirname + '/views');
 
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(__dirname + '/views'));
+app.use(express.json());
+
+app.use(session({
+  secret: 'johnny5isalive',
+  resave: false,
+  saveUninitialized: false
+}));
+
+app.use(function (req, res, next) {
+  console.log('Current page:', req.originalUrl);
+
+  if(req.originalUrl.indexOf('/customer/') >= 0 && !req.session.user) {
+    res.redirect('/app');
+    return;
+  }
+  else if(req.originalUrl.indexOf('/admin/') >= 0) {
+    if(!req.session.user) {
+      res.redirect('/app');
+      return;
+    }
+
+    if(req.session.user.username != 'administrator') {
+      res.redirect('/app');
+      return;
+    }
+  }
+
+  next();
+});
+
 app.get('/', async function(req, res) {
-  res.send("Hey");
+  res.redirect('/app');
+  return;
 });
 
-app.get('/api/customers/:id', async function(req, res) {
-  let customer = await customers.get(req.params.id);
-  res.send(customer);
+app.get('/app', async function(req, res) {
+  let data = {};
+  res.render('app/index', data);
 });
 
-app.post('/api/customers/:id/source', async function(req, res) {
-  let source = await customers.add_payment_source(req.params.id, req.body.email);
-  res.send(source);
+app.post('/app/login', async function(req, res) {
+  let data = {};
+  let user = await database.authenticate(req.body.username, req.body.password);
+
+  if(!user) {
+    data.login_error_message = "Username or password is invalid";
+    
+    res.render('app/index', data);
+  } else {
+    req.session.user = user;
+    
+    if(user.username == 'administrator') 
+      res.redirect('/admin');
+    else
+      res.redirect('/customer');
+    return;
+  }
 });
 
-app.post('/api/customers', async function(req, res) {
-  let customer = await customers.create(req.body.name, req.body.email);
-  res.send(customer);
+app.post('/app/register', async function(req, res) {
+  let data = {};
+
+  if(req.body.password != req.body.password_verification)
+    data.register_error_message = "Password and confirmation do not match";
+
+  else {
+    let user = await database.register_user(req.body.name, req.body.phone, req.body.username, req.body.password, req.body.email, req.body.birthdate);
+
+    if(!user) {
+      data.register_error_message = "User could not be created";
+
+      res.render('app/index', data);
+    } else {
+      req.session.user = user;
+      
+      res.redirect('/customer');
+    }
+  }
 });
 
-app.post('/api/subscriptions', async function(req, res) {
-  let subscription = await subscriptions.create(req.body.customer_id, req.body.plan_name);
-  res.send(subscription);
+app.get('/customer', async function(req, res) {
+  let data = { user: req.session.user };
+  res.render('customer/index', data);
 });
 
-app.get('/api/subscriptions/:id', async function(req, res) {
-  let subscription = await subscriptions.get(req.params.id);
-  res.send(subscription);
+app.get('/customer/profile', async function(req, res) {
+  let data = { user: req.session.user };
+  res.render('customer/profile', data);
+});
+
+app.get('/customer/plan', async function(req, res) {
+  let data = { user: req.session.user };
+  res.render('customer/plan', data);
+});
+
+app.get('/customer/downloads', async function(req, res) {
+  let data = { user: req.session.user };
+  res.render('customer/downloads', data);
+});
+
+app.get('/customer/payment', async function(req, res) {
+  let data = { user: req.session.user };
+  res.render('customer/payment', data);
+});
+
+app.get('/customer/logout', async function(req, res) {
+  delete req.session.user;
+  res.redirect('/app');
 });
 
 app.get(/^(.+)$/, function(req,res) {
@@ -62,6 +151,6 @@ app.get(/^(.+)$/, function(req,res) {
     res.sendFile(__dirname + req.params[0]);
 });
 
-app.listen(3000, function() {
-  console.log("server listening...");
+server.listen(3000, function() {
+  console.log("Server started");
 });
