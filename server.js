@@ -1,8 +1,12 @@
 const express = require('express');
 const session = require('express-session');
+const dotenv = require('dotenv').config();
 const mustacheExpress = require('mustache-express');
 const app = express();
 const socket = require('socket.io');
+const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN, {
+  lazyLoading: true
+});
 
 const http = require('http');
 const server = http.Server(app);
@@ -110,10 +114,50 @@ app.post('/app/register', async function(req, res) {
       res.render('app/index', data);
     } else {
       req.session.user = user;
+
+      let random_code = Math.floor(Math.random() * 900000) + 99999;
+      let number_to_send = req.session.user.phone;
+    
+      req.session.confirm_code = random_code;
+    
+      twilio.messages.create({
+        from: process.env.PHONE_NUMBER,
+        to: number_to_send,
+        body: "Thank you for using Sealand Internet Services. Here is your authorization code: " + random_code
+      })
+      .then((message) => {
+        console.log(message);
+      })
+      .done();
       
-      res.redirect('/customer');
+      res.redirect('/app/confirm');
     }
   }
+});
+
+app.get('/app/confirm', async function(req, res) {
+  let data = { user: req.session.user };
+
+  res.render("app/confirm", data);
+});
+
+app.post('/app/confirm', async function(req, res) {
+  let data = { user: req.session.user };
+  let code_entered = req.body.code;
+
+  console.log(req.body,code_entered, req.session.confirm_code);
+  
+  if(code_entered == req.session.confirm_code) {
+    database.verified(req.session.user.id)
+      .then(() => {
+        res.redirect("/customer");
+      });
+  } else {
+    data.confirm_error_message = "The code entered is incorrect";
+
+    res.render("app/confirm", data);
+  }
+
 });
 
 app.get('/customer', async function(req, res) {
