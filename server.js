@@ -1,3 +1,5 @@
+const debug = false;
+
 const express = require('express');
 const session = require('express-session');
 const dotenv = require('dotenv').config();
@@ -16,10 +18,12 @@ const io = socket(server);
 const Database = require('./lib/database.js');
 const Customers = require('./lib/customers.js');
 const Subscriptions = require('./lib/subscriptions.js');
+const Plans = require('./lib/plans.js');
 
 //  Init database for later
 let database = new Database('./api.db');
 (async () => {
+  if(!debug) return;
   database.wipe().then(async () => {
     let admin_user = await database.register_user("Administrator", "19055555555", "administrator", "admin", "admin@app.com", "1980-03-13");
     console.log('Admin user created', admin_user);
@@ -49,27 +53,27 @@ app.use(session({
   saveUninitialized: false
 }));
 
-app.use(function (req, res, next) {
-  console.log('Current page:', req.originalUrl);
+// app.use(function (req, res, next) {
+//   console.log('Current page:', req.originalUrl);
 
-  if(req.originalUrl.indexOf('/customer/') >= 0 && !req.session.user) {
-    res.redirect('/app');
-    return;
-  }
-  else if(req.originalUrl.indexOf('/admin/') >= 0) {
-    if(!req.session.user) {
-      res.redirect('/app');
-      return;
-    }
+//   if(req.originalUrl.indexOf('/customer/') >= 0 && !req.session.user) {
+//     res.redirect('/app');
+//     return;
+//   }
+//   else if(req.originalUrl.indexOf('/admin/') >= 0) {
+//     if(!req.session.user) {
+//       res.redirect('/app');
+//       return;
+//     }
 
-    if(req.session.user.username != 'administrator') {
-      res.redirect('/app');
-      return;
-    }
-  }
+//     if(req.session.user.username != 'administrator') {
+//       res.redirect('/app');
+//       return;
+//     }
+//   }
 
-  next();
-});
+//   next();
+// });
 
 app.get('/', async function(req, res) {
   res.redirect('/app');
@@ -148,7 +152,7 @@ app.post('/app/confirm', async function(req, res) {
   if(code_entered == req.session.confirm_code) {
     database.verified(req.session.user.id)
       .then(() => {
-        res.redirect('/customer');
+        res.redirect('/customer/payment');
       });
   } else {
     data.confirm_error_message = "The code entered is incorrect";
@@ -167,39 +171,33 @@ app.get('/customer/profile', async function(req, res) {
   res.render('customer/profile', data);
 });
 
-app.get('/customer/plan', async function(req, res) {
-  let data = { user: req.session.user };
-  res.render('customer/plan', data);
-});
-
 app.get('/customer/downloads', async function(req, res) {
   let data = { user: req.session.user };
   res.render('customer/downloads', data);
 });
 
 app.get('/customer/payment', async function(req, res) {
-  let data = { user: req.session.user };
+  let data = { 
+    user: req.session.user,
+    plans: Plans
+  };
+
+  res.render('customer/payment', data);
+});
+
+app.post('/customer/payment', async function(req, res) {
+  let code_entered = req.body.code;
+  let data = { 
+    user: req.session.user,
+    plans: Plans
+  };
+
   res.render('customer/payment', data);
 });
 
 app.get('/customer/logout', async function(req, res) {
   delete req.session.user;
   res.redirect('/app');
-});
-
-app.get('/send', async function(req, res) {
-  let number_to_send = req.params.phone;
-  console.log(req.params);
-  twilio.messages.create({
-    from: process.env.PHONE_NUMBER,
-    to: number_to_send,
-    body: 'create using callback'
-  }, function(err, result) {
-    console.log('Created message using callback');
-    console.log(result.sid);
-  });
-
-  res.send(message);
 });
 
 app.get(/^(.+)$/, function(req,res) {
