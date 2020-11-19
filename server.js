@@ -4,6 +4,7 @@ const dotenv = require('dotenv').config();
 const mustacheExpress = require('mustache-express');
 const app = express();
 const socket = require('socket.io');
+
 const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN, {
   lazyLoading: true
 });
@@ -115,11 +116,11 @@ app.post('/app/register', async function(req, res) {
     } else {
       req.session.user = user;
 
-      let random_code = Math.floor(Math.random() * 900000) + 99999;
+      let random_code = Math.floor(Math.random() * 999) + 001;
       let number_to_send = req.session.user.phone;
-    
+
       req.session.confirm_code = random_code;
-    
+
       twilio.messages.create({
         from: process.env.PHONE_NUMBER,
         to: number_to_send,
@@ -136,29 +137,25 @@ app.post('/app/register', async function(req, res) {
 });
 
 app.get('/app/confirm', async function(req, res) {
-  let data = { user: req.session.user };
-
-  res.render("app/confirm", data);
-});
+  let data = { data: req.session.user };
+  res.render('app/confirm', data);
+})
 
 app.post('/app/confirm', async function(req, res) {
-  let data = { user: req.session.user };
+  let data = { data: req.session.user };
   let code_entered = req.body.code;
 
-  console.log(req.body,code_entered, req.session.confirm_code);
-  
   if(code_entered == req.session.confirm_code) {
     database.verified(req.session.user.id)
       .then(() => {
-        res.redirect("/customer");
+        res.redirect('/customer');
       });
   } else {
     data.confirm_error_message = "The code entered is incorrect";
 
-    res.render("app/confirm", data);
+    res.render('app/confirm', data);
   }
-
-});
+})
 
 app.get('/customer', async function(req, res) {
   let data = { user: req.session.user };
@@ -188,6 +185,21 @@ app.get('/customer/payment', async function(req, res) {
 app.get('/customer/logout', async function(req, res) {
   delete req.session.user;
   res.redirect('/app');
+});
+
+app.get('/send', async function(req, res) {
+  let number_to_send = req.params.phone;
+  console.log(req.params);
+  twilio.messages.create({
+    from: process.env.PHONE_NUMBER,
+    to: number_to_send,
+    body: 'create using callback'
+  }, function(err, result) {
+    console.log('Created message using callback');
+    console.log(result.sid);
+  });
+
+  res.send(message);
 });
 
 app.get(/^(.+)$/, function(req,res) {

@@ -5,26 +5,26 @@
 
     <div class="grid-x grid-padding-x grid-margin-x">
 
-        <div class="cell small-offset-3 small-6 end callout">
+        <div class="cell small-offset-3 small-6 grid-container callout">
 
-            <h3>Confirm your account, {{ user.name }}</h3>
+            <h3>Confirm Account</h3>
             
             <form action="/app/confirm" method="POST">
 
-                {{#confirm_error_message}}
+                {{#comfirm_error_message}}
                 <div class="grid-x grid-padding-x">
 
-                    <div class="cell small-12 error">{{ confirm_error_message }}</div>
+                    <div class="cell small-12 error">{{ comfirm_error_message }}</div>
 
                 </div>
-                {{/confirm_error_message}}
-
+                {{/comfirm_error_message}}
+            
                 <div class="grid-x grid-padding-x">
 
                     <div class="cell small-4">Code:</div>
                     <div class="cell small-8"><input type="text" name="code" id="code" required></div>
 
-                    <div class="cell small-12"><button type="submit" id="verify-button" name="verify-button" class="expanded button">Verify</button></div>
+                    <div class="cell small-12"><button type="submit" id="login-button" name="login-button" class="expanded button">Verify</button></div>
 
                 </div>
 
