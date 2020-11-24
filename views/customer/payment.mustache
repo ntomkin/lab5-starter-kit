@@ -17,8 +17,8 @@
       </div>
     {{/plans}}
 
-    <input type="hidden" id="selected_plan" name="selected-plan" value="">
-    <input type="hidden" id="stripe_token" name="stripe-token" value="">
+    <input type="hidden" id="selected_plan" name="selected_plan" value="">
+    <input type="hidden" id="stripe_token" name="stripe_token" value="">
   </div>
 
   <div class="payment callout">
@@ -53,17 +53,37 @@
   background: rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(0, 0, 0, 0.2);
 }
+
+.StripeElement {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 3px;
+  padding: 6px;
+}
+
+#card-errors {
+  font-size: 14px;
+  color: rgb(200, 0, 0);
+  border: 1px solid rgb(200, 0, 0);
+  padding: 4px;
+  margin: 4px 0;
+}
+
+#card-errors:empty {
+  display: none;
+}
 </style>
 
 <script>
+  var stripe;
+  var elements;
+  var card_element;
 
   // Initialize Stripe
-
   function init_stripe() {
-    var stripe = Stripe('pk_test_51HkBW2IwNv8toLXhpH9lwN5KlAxyLD71OaaXdTzLR8S68uSGUPWHvucLGzQJhujdI7hAgKbmk4S4nssnuzPfP6vW00BVVW9Knr');
-    var elements = stripe.elements();
-    var cardElement = elements.create('card');
-    cardElement.mount('#card-element');
+    stripe = Stripe('{{ stripe_pk }}');
+    elements = stripe.elements();
+    card_element = elements.create('card');
+    card_element.mount('#card-element');
   }
 
   function init_events() {
@@ -76,17 +96,25 @@
       $('#selected_plan').val(plan_id);
     });
 
+    //  Submitting form, validating credit card, getting token
+    let $submit_button = $('#pay');
+    let $stripe_token = $('#stripe_token');
     let $form = $('#customer-payment-form');
     $form.on('submit', function(evt) {
-      evt.preventDefault();
-      stripe.createToken(cardElement)
+      if(!$stripe_token.val())
+        return false;
+    });
+
+    //  User clicks "Pay"
+    $submit_button.on('click', function(evt) {
+      stripe.createToken(card_element)
         .then(function(result) {
           if(result.error) {
             $('#card-errors').text(result.error.message);
           } else {
             create_token(result.token);
           }
-        })
+        });
       return false;
     });
   }
@@ -94,9 +122,12 @@
   function create_token(token) {
     let $form = $('#customer-payment-form');
     let $stripe_token = $('#stripe_token');
-    $stripe_token.val(token);
+    $stripe_token.val(token.id);
     $form.submit();
   }
+
+  init_stripe();
+  init_events();
 </script>
 
 {{>footer}}

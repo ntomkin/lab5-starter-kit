@@ -11,6 +11,8 @@ const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN
   lazyLoading: true
 });
 
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 const http = require('http');
 const server = http.Server(app);
 const io = socket(server);
@@ -53,27 +55,28 @@ app.use(session({
   saveUninitialized: false
 }));
 
-// app.use(function (req, res, next) {
-//   console.log('Current page:', req.originalUrl);
+//  Authentication middleware
+app.use(function (req, res, next) {
+  console.log('Current page:', req.originalUrl);
 
-//   if(req.originalUrl.indexOf('/customer/') >= 0 && !req.session.user) {
-//     res.redirect('/app');
-//     return;
-//   }
-//   else if(req.originalUrl.indexOf('/admin/') >= 0) {
-//     if(!req.session.user) {
-//       res.redirect('/app');
-//       return;
-//     }
+  if(req.originalUrl.indexOf('/customer/') >= 0 && !req.session.user) {
+    res.redirect('/app');
+    return;
+  }
+  else if(req.originalUrl.indexOf('/admin/') >= 0) {
+    if(!req.session.user) {
+      res.redirect('/app');
+      return;
+    }
 
-//     if(req.session.user.username != 'administrator') {
-//       res.redirect('/app');
-//       return;
-//     }
-//   }
+    if(req.session.user.username != 'administrator') {
+      res.redirect('/app');
+      return;
+    }
+  }
 
-//   next();
-// });
+  next();
+});
 
 app.get('/', async function(req, res) {
   res.redirect('/app');
@@ -179,6 +182,7 @@ app.get('/customer/downloads', async function(req, res) {
 app.get('/customer/payment', async function(req, res) {
   let data = { 
     user: req.session.user,
+    stripe_pk: process.env.STRIPE_PUBLIC_KEY,
     plans: Plans
   };
 
@@ -186,13 +190,51 @@ app.get('/customer/payment', async function(req, res) {
 });
 
 app.post('/customer/payment', async function(req, res) {
-  let code_entered = req.body.code;
+  let selected_plan_price_id;
   let data = { 
     user: req.session.user,
+    stripe_pk: process.env.STRIPE_PUBLIC_KEY,
     plans: Plans
   };
 
-  res.render('customer/payment', data);
+  //  Find the Plan, retrieve the product id
+  Plans.forEach(function(element) {
+    if(req.body.selected_plan == element.name) {
+      selected_plan_price_id = element.price_id;
+    }
+  });
+
+  let customer = stripe.customers.create({
+    source: req.body.stripe_token,
+    email: req.session.user.email
+  });
+
+  customer.then(customer => {
+    database.set_stripe_customer_id(req.session.user.id, customer.id)
+      .then(() => {
+        stripe.subscriptions.create({
+          customer: customer.id,
+          items: [{
+              plan: selected_plan_price_id
+          }]
+        })
+        .then(subscription => {
+          // set stripe_subscription_id in database
+          database.set_stripe_subscription_id(req.session.user.id, subscription.id)
+            .then(() => {
+              res.redirect('/customer');
+            })
+            .catch(err => {
+              console.log(err);
+            })
+        })
+        .catch(err => {
+          console.log(err);
+        });
+      });
+  });
+
+  //res.render('customer/payment', data);
 });
 
 app.get('/customer/logout', async function(req, res) {
