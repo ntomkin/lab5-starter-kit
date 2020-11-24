@@ -8,9 +8,9 @@
     <li><a href="/customer/payment">Payment</a></li>
 
     <!-- Only show this line if they have a valid subscription (i.e. user.subscription) -->
-    {{#user}}
+    {{#has_active_plan}}
     <li><a href="/customer/downloads">My Downloads</a></li>
-    {{/user}}
+    {{/has_active_plan}}
 
     <li><a href="/customer/logout">Logout</a></li>
 

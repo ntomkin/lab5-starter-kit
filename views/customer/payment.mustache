@@ -2,6 +2,17 @@
 {{>header}}
 
 <h3>Payment</h3>
+{{#has_active_plan}}
+<div class="plan-notice">
+  You currently have a plan setup.
+</div>
+{{/has_active_plan}}
+
+{{^has_active_plan}}
+<div class="plan-notice">
+  You don't have a plan, so you are being redirected here.
+</div>
+{{/has_active_plan}}
 
 <form action="/customer/payment" method="POST" id="customer-payment-form">
   <div class="plans callout grid-x grid-margin-x grid-padding-x">
@@ -65,11 +76,19 @@
   color: rgb(200, 0, 0);
   border: 1px solid rgb(200, 0, 0);
   padding: 4px;
-  margin: 4px 0;
+  margin: 10px 0 4px 0;
 }
 
 #card-errors:empty {
   display: none;
+}
+
+.plan-notice {
+  font-size: 14px;
+  color: rgb(0, 0, 0);
+  border: 1px solid rgb(0, 0, 230);
+  padding: 4px;
+  margin: 10px 0;
 }
 </style>
 
@@ -107,6 +126,13 @@
 
     //  User clicks "Pay"
     $submit_button.on('click', function(evt) {
+      let $selected_plan = $('#selected_plan');
+      
+      if($selected_plan.val() == "") {
+        $('#card-errors').text("A plan must be selected.");
+        return false;
+      }
+
       stripe.createToken(card_element)
         .then(function(result) {
           if(result.error) {
