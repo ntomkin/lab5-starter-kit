@@ -70,8 +70,8 @@ app.use(session({
 //  The default data we want to include in every page request
 var default_data = {
   stripe_pk: process.env.STRIPE_PUBLIC_KEY,
-  has_active_plan: false,
   plans: Plans.items,
+  has_active_plan: false,
   user: null,
 }
 
@@ -214,12 +214,13 @@ app.get('/customer/profile', async function(req, res) {
 });
 
 //  You will need to complete this part!
-//  Task: Update user based on data based from form.
+//  Task: Update user data based on data submitted via form.
 app.post('/customer/profile', async function(req, res) {
   let data = { 
     ...default_data, 
     update_error_message: null, 
   };
+  let updated_user = await database.update_profile();
   res.render('customer/profile', data);
 });
 
@@ -263,6 +264,10 @@ app.post('/customer/payment', async function(req, res) {
           // set stripe_subscription_id in database
           database.set_stripe_subscription_id(req.session.user.id, subscription.id)
             .then(() => {
+              req.session.user.stripe_customer_id = customer.id;
+              req.session.user.stripe_subscription_id = subscription.id;
+              default_data.user = req.session.user;
+              default_data.has_active_plan = true;
               res.redirect('/customer');
               return;
             })
@@ -310,7 +315,14 @@ app.get('/admin', async function(req, res) {
     format_date: format_date 
   };
   res.render('admin/index', data);
-})
+});
+
+app.get('/admin/logout', async function(req, res) {
+  delete req.session.user;
+  default_data.user = null;
+  default_data.has_active_plan = false;
+  res.redirect('/app');
+});
 
 app.get(/^(.+)$/, function(req,res) {
     console.log("Static file request: " + req.params[0]);
