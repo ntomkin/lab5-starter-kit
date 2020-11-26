@@ -180,12 +180,12 @@ app.post('/app/register', async function(req, res) {
 });
 
 app.get('/app/confirm', async function(req, res) {
-  let data = { ...default_data, data: req.session.user };
+  let data = { ...default_data, user: req.session.user };
   res.render('app/confirm', data);
 })
 
 app.post('/app/confirm', async function(req, res) {
-  let data = { ...default_data, data: req.session.user };
+  let data = { ...default_data, user: req.session.user };
   let code_entered = req.body.code;
 
   if(code_entered == req.session.confirm_code) {
