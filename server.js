@@ -66,16 +66,17 @@ app.use(session({
   saveUninitialized: false
 }));
 
-//  Authentication middleware
-
+//  Default data:
 //  The default data we want to include in every page request
 var default_data = {
   stripe_pk: process.env.STRIPE_PUBLIC_KEY,
   has_active_plan: false,
-  plans: Plans.items
+  plans: Plans.items,
+  user: null,
 }
 
-app.use(function (req, res, next) {
+//  Authentication middleware
+app.use(async function (req, res, next) {
   console.log('Current page:', req.originalUrl);
 
   //  They went to /customer, but they aren't logged in
@@ -85,8 +86,10 @@ app.use(function (req, res, next) {
   }
   //  They are logged in...
   else if(req.originalUrl.indexOf('/customer/') >= 0 && req.session.user) {
+    //  If the user is logged in, keep a copy of the user's session
+    default_data.user = req.session.user;
     //  If the user has a plan, let's add that to the list of data we pass in every page
-    default_data.has_active_plan = req.session.user.stripe_subscription_id ? true : false;
+    default_data.has_active_plan = req.session.user.stripe_subscription_id != null ? true : false;
     //  Do you have a subscription???
     //  Make sure they have a subscription id, that this is a GET request, and that they are not currently on the payment page
     if(!req.session.user.stripe_subscription_id && req.method == "GET" && req.originalUrl.indexOf('/customer/payment') == -1) {
@@ -120,12 +123,12 @@ app.get('/', async function(req, res) {
 });
 
 app.get('/app', async function(req, res) {
-  let data = { ...default_data, };
+  let data = { ...default_data };
   res.render('app/index', data);
 });
 
 app.post('/app/login', async function(req, res) {
-  let data = { ...default_data, };
+  let data = { ...default_data };
   let user = await database.authenticate(req.body.username, req.body.password);
 
   if(!user) {
@@ -144,7 +147,7 @@ app.post('/app/login', async function(req, res) {
 });
 
 app.post('/app/register', async function(req, res) {
-  let data = { ...default_data, };
+  let data = { ...default_data };
 
   if(req.body.password != req.body.password_verification)
     data.register_error_message = "Password and confirmation do not match";
@@ -180,12 +183,12 @@ app.post('/app/register', async function(req, res) {
 });
 
 app.get('/app/confirm', async function(req, res) {
-  let data = { ...default_data, user: req.session.user };
+  let data = { ...default_data };
   res.render('app/confirm', data);
 })
 
 app.post('/app/confirm', async function(req, res) {
-  let data = { ...default_data, user: req.session.user };
+  let data = { ...default_data };
   let code_entered = req.body.code;
 
   if(code_entered == req.session.confirm_code) {
@@ -201,33 +204,45 @@ app.post('/app/confirm', async function(req, res) {
 })
 
 app.get('/customer', async function(req, res) {
-  let data = { ...default_data, user: req.session.user };
+  let data = { ...default_data };
   res.render('customer/index', data);
 });
 
 app.get('/customer/profile', async function(req, res) {
-  let data = { ...default_data, user: req.session.user };
+  let data = { ...default_data };
+  res.render('customer/profile', data);
+});
+
+//  You will need to complete this part!
+//  Task: Update user based on data based from form.
+app.post('/customer/profile', async function(req, res) {
+  let data = { 
+    ...default_data, 
+    update_error_message: null, 
+  };
   res.render('customer/profile', data);
 });
 
 app.get('/customer/downloads', async function(req, res) {
-  let data = { ...default_data, user: req.session.user };
+  let data = { ...default_data };
   res.render('customer/downloads', data);
 });
 
 app.get('/customer/payment', async function(req, res) {
-  let data = {
-    ...default_data,
-    user: req.session.user,
-  };
+  let data = { ...default_data };
 
   res.render('customer/payment', data);
 });
+
+//  Important: The lab requires that you be able to cancel a subscription. 
+//  Make sure you don't miss that, or other key requirements!
 
 app.post('/customer/payment', async function(req, res) {
   //  Find the Plan, retrieve the product id
   let plan = await Plans.get_plan_by_name(req.body.selected_plan);
 
+  //  Should check to see if the customer already exists.
+  //  If so, get the customer.id instead of creating a new one.
   let customer = stripe.customers.create({
     source: req.body.stripe_token,
     email: req.session.user.email,
@@ -264,6 +279,8 @@ app.post('/customer/payment', async function(req, res) {
 
 app.get('/customer/logout', async function(req, res) {
   delete req.session.user;
+  default_data.user = null;
+  default_data.has_active_plan = false;
   res.redirect('/app');
 });
 
@@ -288,8 +305,7 @@ app.get('/admin', async function(req, res) {
   );
   //  Note that we're now passing a reference to a function here:
   let data = { 
-    ...default_data,
-    user: req.session.user, 
+    ...default_data, 
     customers: customer_list, 
     format_date: format_date 
   };
@@ -297,7 +313,7 @@ app.get('/admin', async function(req, res) {
 })
 
 app.get(/^(.+)$/, function(req,res) {
-    console.log("static file request: " + req.params[0]);
+    console.log("Static file request: " + req.params[0]);
     res.sendFile(__dirname + req.params[0]);
 });
 
